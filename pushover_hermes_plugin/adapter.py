@@ -148,7 +148,12 @@ class PushoverAdapter(BasePlatformAdapter):
         extra = getattr(config, "extra", {}) or {}
         self._device: str = extra.get("device", "") if isinstance(extra, dict) else ""
 
-    async def connect(self) -> bool:
+    async def connect(self, *, is_reconnect: bool = False) -> bool:
+        """Accept the ``is_reconnect`` kwarg required by the gateway's
+        reconnect watcher (see BasePlatformAdapter.connect contract).
+
+        Pushover is stateless (outbound HTTP only), so this is a no-op.
+        """
         return True
 
     async def disconnect(self) -> None:

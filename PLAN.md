@@ -315,7 +315,7 @@ class PushoverAdapter(BasePlatformAdapter):
         extra = getattr(config, "extra", {}) or {}
         self._device: str = extra.get("device", "") if isinstance(extra, dict) else ""
 
-    async def connect(self) -> bool:
+    async def connect(self, *, is_reconnect: bool = False) -> bool:
         return True
 
     async def disconnect(self) -> None:

@@ -295,6 +295,44 @@ class TestPushoverMessageTruncation:
 
 
 # ---------------------------------------------------------------------------
+# connect() — must accept is_reconnect kwarg (gateway reconnect contract)
+# ---------------------------------------------------------------------------
+
+class TestPushoverConnect:
+    """connect() must accept the is_reconnect kwarg from the gateway's
+    reconnect watcher (BasePlatformAdapter.connect contract).
+
+    Regression: the gateway calls ``connect(is_reconnect=True)`` on every
+    reconnect. The original signature ``connect(self)`` raised TypeError,
+    preventing reconnection for the full 240s retry cycle.
+    """
+
+    @pytest.mark.asyncio
+    async def test_connect_accepts_is_reconnect_false(self):
+        config = PlatformConfig(enabled=True)
+        with patch.dict("os.environ", {"PUSHOVER_APP_TOKEN": "tok", "PUSHOVER_USER_KEY": "user"}, clear=True):
+            adapter = PushoverAdapter(config)
+        result = await adapter.connect(is_reconnect=False)
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_connect_accepts_is_reconnect_true(self):
+        config = PlatformConfig(enabled=True)
+        with patch.dict("os.environ", {"PUSHOVER_APP_TOKEN": "tok", "PUSHOVER_USER_KEY": "user"}, clear=True):
+            adapter = PushoverAdapter(config)
+        result = await adapter.connect(is_reconnect=True)
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_connect_default_no_kwarg(self):
+        config = PlatformConfig(enabled=True)
+        with patch.dict("os.environ", {"PUSHOVER_APP_TOKEN": "tok", "PUSHOVER_USER_KEY": "user"}, clear=True):
+            adapter = PushoverAdapter(config)
+        result = await adapter.connect()
+        assert result is True
+
+
+# ---------------------------------------------------------------------------
 # get_chat_info() — now async
 # ---------------------------------------------------------------------------
 
