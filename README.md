@@ -1,25 +1,36 @@
 # pushover-hermes-plugin
 
-A [Hermes Agent](https://github.com/benoitbeauchamp/hermes-agent) plugin that adds [Pushover](https://pushover.net) as a notification platform. Outbound-only — sends push notifications, no inbound message handling.
+A [Hermes Agent](https://github.com/NousResearch/hermes-agent) plugin that adds [Pushover](https://pushover.net) as a notification platform. Outbound-only — sends push notifications, no inbound message handling.
+
+It also provides opt-in agent lifecycle notifications (finished, questions, errors, approvals, blockers) delivered via Pushover and/or native desktop notifications.
+
+## What this plugin does on your machine
+
+- **Network:** sends HTTPS POST requests to `https://api.pushover.net/1/messages.json` (Pushover's API) with your app token, user key and the notification text. No other network calls, no telemetry.
+- **Notification content:** when lifecycle notifications are enabled, excerpts of the agent's replies, questions, errors and terminal commands awaiting approval are sent to Pushover. Use `PUSHOVER_NOTIFY_QUESTION=minimal` to send generic messages instead.
+- **Shell commands:** runs `notify-send` only when native notifications are enabled (`PUSHOVER_NOTIFY_NATIVE=true` or `/notifications enable native`).
+- **Files written:** `$HERMES_HOME/logs/pushover_hermes_plugin.log` (plugin log), `$HERMES_HOME/plugins/pushover/settings.json` (enable/disable state saved by `/notifications save`), and `$HERMES_HOME/.env` (only when you run the interactive setup wizard).
+- **Background processes:** none.
 
 ## Requirements
 
 - Python 3.11+
-- `aiohttp >= 3.9`
+- `aiohttp >= 3.9, < 4`
 - A [Pushover](https://pushover.net) account with an app token and user key
+- Optional: `notify-send` (libnotify) for native desktop notifications
 
 ## Installation
 
 ### From a remote Git repository
 
 ```bash
-hermes plugins install user/repo --enable
+hermes plugins install lightx/pushover-hermes-plugin --enable
 ```
 
 ### From a local clone (development)
 
 ```bash
-git clone https://github.com/user/pushover-hermes-plugin.git
+git clone https://github.com/lightx/pushover-hermes-plugin.git
 cd pushover-hermes-plugin
 hermes plugins install file://$(pwd) --enable
 ```
@@ -87,6 +98,33 @@ export PUSHOVER_ALLOWED_USERS=user_key_1,user_key_2   # comma-separated
 export PUSHOVER_ALLOW_ALL_USERS=true                  # disable restriction
 ```
 
+## Agent lifecycle notifications
+
+Off by default. Enable with:
+
+```bash
+export PUSHOVER_NOTIFY_ENABLED=true     # Pushover lifecycle notifications
+export PUSHOVER_NOTIFY_NATIVE=true      # native desktop notifications (notify-send)
+```
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `PUSHOVER_NOTIFY_STATES` | `all` | Space-separated subset of `finished questions errors pre-approval post-approval blockers`, or `usual` (everything except `post-approval`) / `all` |
+| `PUSHOVER_NOTIFY_QUESTION` | `full` | Detail level: `full`, `summary`, or `minimal` (no agent text sent) |
+| `PUSHOVER_NOTIFY_DEVICE` | — | Restrict lifecycle notifications to one Pushover device |
+
+Hooks used: `post_llm_call`, `pre_approval_request`, `post_approval_response`, `pre_tool_call`, `post_tool_call`.
+
+### `/notifications` command
+
+```
+/notifications status                     show current state
+/notifications test pushover|native       send a test notification
+/notifications enable pushover|native     turn a channel on
+/notifications disable pushover|native    turn a channel off
+/notifications save                       persist enable/disable state across restarts
+```
+
 ## Logging
 
 Plugin logs are written to `~/.hermes/logs/pushover_hermes_plugin.log`.
@@ -116,6 +154,10 @@ hermes gateway restart --system
 - Images are sent as a text message containing the URL and caption
 - `metadata["title"]` is forwarded as the notification title when present
 - Fire-and-forget — no reply handling
+
+## Credits
+
+Lifecycle notifications, native notifications, the `/notifications` command, setup wizard and CI were contributed by [Cosmin Diaconu](https://github.com/bcdiaconu).
 
 ## License
 
