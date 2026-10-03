@@ -9,7 +9,7 @@ It also provides opt-in agent lifecycle notifications (finished, questions, erro
 - **Network:** sends HTTPS POST requests to `https://api.pushover.net/1/messages.json` (Pushover's API) with your app token, user key and the notification text. No other network calls, no telemetry.
 - **Notification content:** when lifecycle notifications are enabled, excerpts of the agent's replies, questions, errors and terminal commands awaiting approval are sent to Pushover. Use `PUSHOVER_NOTIFY_QUESTION=minimal` to send generic messages instead.
 - **Shell commands:** runs `notify-send` only when native notifications are enabled (`PUSHOVER_NOTIFY_NATIVE=true` or `/notifications enable native`).
-- **Files written:** `$HERMES_HOME/logs/pushover_hermes_plugin.log` (plugin log), `$HERMES_HOME/plugins/pushover/settings.json` (enable/disable state saved by `/notifications save`), and `$HERMES_HOME/.env` (only when you run the interactive setup wizard).
+- **Files written:** `$HERMES_HOME/logs/pushover_hermes_plugin.log` (plugin log), `$HERMES_HOME/plugin-data/pushover-hermes-plugin/settings.json` (enable/disable state saved by `/notifications save`), and `$HERMES_HOME/.env` (only when you run the interactive setup wizard).
 - **Background processes:** none.
 
 ## Requirements

@@ -721,8 +721,8 @@ _notify_state_set = (
 
 
 # Persistent settings file — survives plugin reloads
-_SETTINGS_DIR = _hermes_home() / "plugins" / "pushover"
-_SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
+# Lives under plugin-data/, not plugins/ — a bare dir in plugins/ looks like a plugin to discovery.
+_SETTINGS_DIR = _hermes_home() / "plugin-data" / "pushover-hermes-plugin"
 _SETTINGS_FILE = _SETTINGS_DIR / "settings.json"
 
 
@@ -752,6 +752,7 @@ def _save_settings() -> str:
         "pushover_enabled": _pushover_notify_enabled,
         "native_enabled": _notify_native_enabled,
     }
+    _SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
     _SETTINGS_FILE.write_text(json.dumps(data, indent=2) + "\n")
     _plugin_logger.info("[SETTINGS] saved: %s", data)
     _plugin_logger.debug("[SETTINGS] file written successfully: %s", _SETTINGS_FILE)
