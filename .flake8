@@ -1,0 +1,6 @@
+[flake8]
+exclude =
+    build/,
+    dist/
+per-file-ignores =
+    tests/conftest.py:E402,

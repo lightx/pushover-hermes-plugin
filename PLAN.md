@@ -446,21 +446,21 @@ git commit -m "feat: add adapted unit tests from hermes-agent core"
 
 ### Task A4: Install and smoke test
 
-**Step 1:** Install the plugin into the hermes venv
+**Step 1:** Install the plugin using the Hermes plugin CLI
 
 ```bash
-cd /home/lightx/source/hermes-agent
-nix develop -c pip install -e /home/lightx/project/pushover-hermes-plugin
+cd /home/lightx/project/pushover-hermes-plugin
+hermes plugins install file://$(pwd) --enable
 ```
 
 **Step 2:** Verify entry point discovery
 
 ```bash
-nix develop -c python -c "
+python -c "
 import importlib.metadata
 eps = importlib.metadata.entry_points(group='hermes_agent.plugins')
 names = [ep.name for ep in eps]
-assert 'pushover-platform' in names, f'Not found. Got: {names}'
+assert 'pushover-hermes-plugin' in names, f'Not found. Got: {names}'
 print('Entry point discovered:', names)
 "
 ```
@@ -468,7 +468,15 @@ print('Entry point discovered:', names)
 **Step 3:** Verify plugin registration
 
 ```bash
-nix develop -c python -c "
+hermes plugins list
+```
+
+Check that `pushover-hermes-plugin` appears in the list with status `enabled`.
+
+Alternatively, verify programmatically:
+
+```bash
+python -c "
 from hermes_cli.plugins import PluginManager
 pm = PluginManager()
 pm.discover_and_load()
@@ -487,7 +495,7 @@ print('platform_hint:', entry.platform_hint[:60])
 **Step 4:** Verify `Platform("pushover")` resolves
 
 ```bash
-nix develop -c python -c "
+python -c "
 from hermes_cli.plugins import PluginManager
 pm = PluginManager()
 pm.discover_and_load()
@@ -807,7 +815,7 @@ nix develop -c python -c "import run_agent, cli, hermes_cli; print('OK')"
 
 4. Add a note at the bottom of the Local-Only Additions section:
 
-   > **Pushover is now a standalone plugin** (`pushover-hermes-plugin`). After merging upstream, verify the plugin is still installed (`pip show pushover-hermes-plugin`). Do NOT re-add Pushover adapter code to core — the plugin's `register()` entry point + `platform_registry` handles everything except the cron scheduler entries above.
+   > **Pushover is now a standalone plugin** (`pushover-hermes-plugin`). After merging upstream, verify the plugin is still installed (`hermes plugins list`). Do NOT re-add Pushover adapter code to core — the plugin's `register()` entry point + `platform_registry` handles everything except the cron scheduler entries above.
 
 No git commit needed — skills live outside the repo.
 
@@ -824,7 +832,7 @@ No git commit needed — skills live outside the repo.
 | `send_message` can't find pconfig | Keep env override block in `_apply_env_overrides()` using `Platform("pushover")`. |
 | `interactive_setup()` breaks on hermes refactor | Inlined prompts + direct file write — no dependency on `hermes_cli.gateway` private helpers. |
 | Venv stale after moving files | `rm .venv/.nix-stamp` then rebuild. |
-| Plugin not found after pip install | Verify with `importlib.metadata.entry_points(group='hermes_agent.plugins')`. |
+|| Plugin not found | Verify with `hermes plugins list` and `importlib.metadata.entry_points(group='hermes_agent.plugins')`. |
 
 ---
 

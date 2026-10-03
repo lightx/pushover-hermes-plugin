@@ -1,10 +1,11 @@
-name: pushover-platform
+name: pushover-hermes-plugin
 kind: platform
 version: 1.0.0
 description: >
   Pushover gateway adapter for Hermes Agent.
   Sends push notifications via the Pushover API.
   Outbound-only — no inbound message handling.
+  Includes agent lifecycle notifications (opt-in).
 author: Benoit Beauchamp
 requires_env:
   - name: PUSHOVER_APP_TOKEN
@@ -13,3 +14,19 @@ requires_env:
   - name: PUSHOVER_USER_KEY
     description: "Your Pushover User Key (shown on pushover.net front page)"
     secret: false
+optional_env:
+  - name: PUSHOVER_NOTIFY_ENABLED
+    description: "Enable agent lifecycle notifications (true/false)"
+    default: "false"
+  - name: PUSHOVER_NOTIFY_NATIVE
+    description: "Enable native desktop notifications via notify-send (true/false)"
+    default: "false"
+  - name: PUSHOVER_NOTIFY_QUESTION
+    description: "Question detail level: full, summary, or minimal (privacy)"
+    default: "full"
+  - name: PUSHOVER_NOTIFY_STATES
+    description: "Space-separated states: finished, questions, errors, approvals, all"
+    default: "all"
+  - name: PUSHOVER_NOTIFY_DEVICE
+    description: "Optional device filter for notifications"
+    default: ""

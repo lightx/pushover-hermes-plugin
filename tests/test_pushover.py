@@ -81,17 +81,23 @@ class TestIsConnected:
 # ---------------------------------------------------------------------------
 
 class TestValidateConfig:
+    """validate_config() checks ONLY config.yaml fields, NOT env vars."""
+
     def test_false_when_empty(self):
-        assert validate_config(PlatformConfig(enabled=True)) is False
+        with patch.dict("os.environ", {}, clear=True):
+            assert validate_config(PlatformConfig(enabled=True)) is False
 
     def test_false_when_only_api_key(self):
-        assert validate_config(PlatformConfig(enabled=True, api_key="tok")) is False
+        with patch.dict("os.environ", {}, clear=True):
+            assert validate_config(PlatformConfig(enabled=True, api_key="tok")) is False
 
     def test_false_when_only_token(self):
-        assert validate_config(PlatformConfig(enabled=True, token="key")) is False
+        with patch.dict("os.environ", {}, clear=True):
+            assert validate_config(PlatformConfig(enabled=True, token="key")) is False
 
     def test_true_when_both_set(self):
-        assert validate_config(PlatformConfig(enabled=True, api_key="tok", token="key")) is True
+        with patch.dict("os.environ", {}, clear=True):
+            assert validate_config(PlatformConfig(enabled=True, api_key="tok", token="key")) is True
 
 
 # ---------------------------------------------------------------------------
@@ -403,3 +409,122 @@ class TestPushoverSendImage:
         assert result.success is True
         call_data = mock_session.post.call_args[1]["data"]
         assert call_data["message"] == "https://example.com/img.jpg"
+
+
+class TestNotificationHelpers:
+    """Tests for agent lifecycle notification detection functions."""
+
+    def test_is_question_with_question_mark(self):
+        from pushover_hermes_plugin.adapter import _is_question
+        assert _is_question("What should I do?") is True
+        assert _is_question("Could you clarify?") is True
+
+    def test_is_question_without_question_mark(self):
+        from pushover_hermes_plugin.adapter import _is_question
+        assert _is_question("Task completed.") is False
+        assert _is_question("I have a question about the approach") is True
+
+    def test_is_question_empty(self):
+        from pushover_hermes_plugin.adapter import _is_question
+        assert _is_question("") is False
+        assert _is_question("   ") is False
+
+    def test_has_error_with_error_keyword(self):
+        from pushover_hermes_plugin.adapter import _has_error
+        assert _has_error("Error: something failed") is True
+        assert _has_error("Failed to complete task") is True
+
+    def test_has_error_without_error_keyword(self):
+        from pushover_hermes_plugin.adapter import _has_error
+        assert _has_error("Task completed successfully") is False
+        assert _has_error("All done!") is False
+
+    def test_has_error_with_warning_emoji(self):
+        from pushover_hermes_plugin.adapter import _has_error
+        assert _has_error("⚠️ Something went wrong") is True
+
+    def test_extract_question_single_line(self):
+        from pushover_hermes_plugin.adapter import _extract_question
+        result = _extract_question("What should I do next?")
+        assert result == "What should I do next?"
+
+    def test_extract_question_multi_line(self):
+        from pushover_hermes_plugin.adapter import _extract_question
+        response = "I'm not sure about this.\nWhich option do you prefer?\nLet me know."
+        result = _extract_question(response)
+        assert "Which option" in result
+
+    def test_extract_error_single_line(self):
+        from pushover_hermes_plugin.adapter import _extract_error
+        result = _extract_error("Error: something failed")
+        assert result == "Error: something failed"
+
+    def test_extract_error_multi_line(self):
+        from pushover_hermes_plugin.adapter import _extract_error
+        response = "Starting task...\nError: connection refused\nRetrying..."
+        result = _extract_error(response)
+        assert "Error: connection refused" == result
+
+
+class TestNotificationStateFiltering:
+    """Tests for PUSHOVER_NOTIFY_STATES per-state filtering."""
+
+    def _call_with_states(self, states: str, kwargs: dict) -> bool:
+        """Helper: set states env, call hook, return whether notification was sent."""
+        import pushover_hermes_plugin.adapter as mod
+        orig_states = mod._notify_states
+        orig_set = mod._notify_state_set
+        sent = []
+
+        def capture(title, msg):
+            sent.append((title, msg))
+
+        mod._notify_states = states.lower()
+        mod._notify_state_set = set(states.split()) if states.lower() != "all" else {"finished", "questions", "errors", "pre-approval", "post-approval", "blockers"}
+        mod._pushover_notify_enabled = True
+
+        try:
+            with patch.object(mod, "_send_pushover_notification", capture):
+                mod._on_post_llm_call(**kwargs)
+            return len(sent) > 0
+        finally:
+            mod._notify_states = orig_states
+            mod._notify_state_set = orig_set
+
+    def test_finished_allowed(self):
+        sent = self._call_with_states("finished", {"assistant_response": "Task done."})
+        assert sent is True
+
+    def test_finished_blocked(self):
+        sent = self._call_with_states("errors", {"assistant_response": "Task done."})
+        assert sent is False
+
+    def test_questions_allowed(self):
+        sent = self._call_with_states("questions", {"assistant_response": "Which option?"})
+        assert sent is True
+
+    def test_questions_blocked(self):
+        sent = self._call_with_states("finished", {"assistant_response": "Which option?"})
+        assert sent is False
+
+    def test_errors_allowed(self):
+        sent = self._call_with_states("errors", {"assistant_response": "Error: failed"})
+        assert sent is True
+
+    def test_errors_blocked(self):
+        sent = self._call_with_states("finished", {"assistant_response": "Error: failed"})
+        assert sent is False
+
+    def test_all_states_allowed(self):
+        # "all" means everything is allowed
+        assert self._call_with_states("all", {"assistant_response": "Done."}) is True
+        assert self._call_with_states("all", {"assistant_response": "Question?"}) is True
+        assert self._call_with_states("all", {"assistant_response": "Error: x"}) is True
+
+    def test_multiple_states(self):
+        sent_err = self._call_with_states("errors questions", {"assistant_response": "Error: x"})
+        sent_q = self._call_with_states("errors questions", {"assistant_response": "Which?"})
+        sent_fin = self._call_with_states("errors questions", {"assistant_response": "Done."})
+        assert sent_err is True
+        assert sent_q is True
+        assert sent_fin is False

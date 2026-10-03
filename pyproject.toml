@@ -2,6 +2,12 @@
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.package-data]
+"pushover_hermes_plugin" = ["plugin.yaml"]
+
+[tool.setuptools.packages.find]
+include = ["pushover_hermes_plugin*"]
+
 [project]
 name = "pushover-hermes-plugin"
 version = "1.0.0"
@@ -11,5 +17,16 @@ license = {text = "MIT"}
 requires-python = ">=3.11"
 dependencies = ["aiohttp>=3.9"]
 
+# Optional: used by sync notification hooks (fire-and-forget).
+# Falls back to urllib if not available, so not strictly required.
+[project.optional-dependencies]
+notify = ["requests>=2.28"]
+setup = ["prompt_toolkit>=3.0.0", "wcwidth>=0.2.13"]
+test = ["pytest>=7", "pytest-asyncio>=0.23", "flake8"]
+
 [project.entry-points."hermes_agent.plugins"]
-pushover-platform = "pushover_hermes_plugin"
+pushover-hermes-plugin = "pushover_hermes_plugin"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
