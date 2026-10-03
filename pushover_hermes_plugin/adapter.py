@@ -36,7 +36,6 @@ import atexit
 import json
 import logging
 import os
-import re
 import subprocess
 import sys
 import time
@@ -773,9 +772,8 @@ def _log_notify_init():
         "[INIT] _NOTIFY_ENABLED=%s, _NOTIFY_NATIVE=%s, _notify_question=%s, _notify_device=%s, _notify_states=%s, _notify_state_set=%s",
         _pushover_notify_enabled, _notify_native_enabled, _notify_question, _notify_device, _notify_states, _notify_state_set
     )
-    _plugin_logger.debug("[INIT] env vars present: PUSHOVER_APP_TOKEN=%s, PUSHOVER_USER_KEY=%s, SUDO_PASSWORD=%s",
-                        bool(os.getenv("PUSHOVER_APP_TOKEN")), bool(os.getenv("PUSHOVER_USER_KEY")),
-                        "SUDO_PASSWORD" in os.environ)
+    _plugin_logger.debug("[INIT] env vars present: PUSHOVER_APP_TOKEN=%s, PUSHOVER_USER_KEY=%s",
+                        bool(os.getenv("PUSHOVER_APP_TOKEN")), bool(os.getenv("PUSHOVER_USER_KEY")))
 
 
 atexit.register(_log_notify_init)
@@ -938,18 +936,6 @@ def _extract_error(response: str) -> str:
         if any(ind in lower for ind in ["error:", "failed:", "unable to", "cannot "]):
             return line
     return response.split("\n")[0].strip()
-
-
-_SUDO_PLAIN_RE = re.compile(
-    r"(?:^|[;&|`\n]|&&|\|\|)\s*sudo\b(?!\s+-(?:S|s|--stdin|--askpass))"
-)
-
-
-def _is_sudo_password_prompt(command: str) -> bool:
-    """Detect `sudo` commands that will prompt for password."""
-    result = bool(_SUDO_PLAIN_RE.search(command))
-    _plugin_logger.info("[SUDO_CHECK] command=%s, regex_match=%s", command[:100], result)
-    return result
 
 
 def _notify_message(minimal: str, summary: str, full: str) -> str:
@@ -1193,37 +1179,6 @@ def _on_pre_tool_call(**kwargs: Any) -> None:
         _plugin_logger.debug("[PRE_TOOL] notification: title=%s", title)
         _dispatch_notification(title, message)
         _plugin_logger.info("[PRE_TOOL] notification SENT for clarify")
-
-    # --- Terminal sudo: notify if command will prompt for password ---
-    if tool_name == "terminal":
-        _plugin_logger.info("[PRE_TOOL] tool=terminal detected")
-        command = str(args.get("command") or "")
-        _plugin_logger.debug("[PRE_TOOL] terminal command=%s", command[:200])
-        _plugin_logger.info(
-            "[PRE_TOOL] terminal check: blockers_in_set=%s, sudo_password_in_env=%s, _NOTIFY_ENABLED=%s",
-            "blockers" in _notify_state_set,
-            "SUDO_PASSWORD" in os.environ,
-            _pushover_notify_enabled,
-        )
-        if "blockers" in _notify_state_set:
-            _plugin_logger.info("[PRE_TOOL] blockers IN state set - checking for sudo")
-            is_sudo = _is_sudo_password_prompt(command)
-            _plugin_logger.debug("[PRE_TOOL] _is_sudo_password_prompt returned: %s", is_sudo)
-            if is_sudo:
-                _plugin_logger.debug("[PRE_TOOL] SUDO PASSWORD PROMPT detected: %s", command[:80])
-                msg = _notify_message(
-                    minimal="Sudo password needed — the command will timeout without input",
-                    summary=f"Sudo command requires password: {command[:120]}",
-                    full=f"Sudo command requires password: {command[:300]}",
-                )
-                _plugin_logger.info("[PRE_TOOL] calling _dispatch_notification for sudo")
-                _dispatch_notification(
-                    "Hermes — Sudo Password Needed",
-                    msg,
-                )
-                _plugin_logger.debug("[PRE_TOOL] _dispatch_notification returned")
-        else:
-            _plugin_logger.debug("[PRE_TOOL] blockers NOT in state set - skipping sudo check")
 
     if not session_id:
         _plugin_logger.info("[PRE_TOOL] no session_id - returning early")
