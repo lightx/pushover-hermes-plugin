@@ -36,6 +36,7 @@ import atexit
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 import time
@@ -1244,6 +1245,55 @@ def _on_post_tool_call(**kwargs: Any) -> None:
         _dispatch_notification("Hermes — Kanban Blocked", message)
 
 
+# Pushover user and group keys are 30 characters, A-Z a-z 0-9.
+_PUSHOVER_KEY_RE = re.compile(r"^[A-Za-z0-9]{30}$")
+
+
+def _env_enablement() -> Optional[Dict[str, Any]]:
+    """``env_enablement_fn``: seed the home channel so ``send_message(target="pushover")`` and
+    ``hermes send -t pushover`` resolve it. Falls back to the user key — that is where
+    Pushover delivers anyway."""
+    home = (os.getenv("PUSHOVER_HOME_CHANNEL", "") or os.getenv("PUSHOVER_USER_KEY", "")).strip()
+    if not (os.getenv("PUSHOVER_APP_TOKEN", "").strip() and home):
+        return None
+    return {"home_channel": {"chat_id": home, "name": os.getenv("PUSHOVER_HOME_CHANNEL_NAME", "Home")}}
+
+
+def _parse_target_ref(ref: str) -> Optional[tuple]:
+    """``parse_target_ref_fn``: accept a raw Pushover user/group key as ``pushover:<key>``."""
+    ref = (ref or "").strip()
+    return (ref, None) if _PUSHOVER_KEY_RE.match(ref) else None
+
+
+async def _standalone_send(
+    pconfig, chat_id: str, message: str, *, thread_id: Optional[str] = None,
+    media_files: Optional[list] = None, force_document: bool = False,
+) -> Dict[str, Any]:
+    """``standalone_sender_fn``: one-shot send without a live gateway adapter
+    (``hermes send``, out-of-process cron delivery)."""
+    result = await PushoverAdapter(pconfig).send(chat_id, message)
+    if result.success:
+        return {"success": True, "message_id": result.message_id}
+    return {"error": result.error or "Pushover send failed"}
+
+
+def _optional_platform_hooks() -> Dict[str, Any]:
+    """Registry hooks newer than some supported Hermes releases; pass only those the
+    running ``PlatformEntry`` knows so older gateways still load the plugin."""
+    hooks = {
+        "env_enablement_fn": _env_enablement,
+        "parse_target_ref_fn": _parse_target_ref,
+        "standalone_sender_fn": _standalone_send,
+    }
+    try:
+        from gateway.platform_registry import PlatformEntry
+        known = set(getattr(PlatformEntry, "__dataclass_fields__", {}))
+    except Exception:
+        return {}
+    return {k: v for k, v in hooks.items() if k in known}
+
+
+
 def register(ctx) -> None:
     """Plugin entry point — called by the Hermes plugin loader."""
     ctx.register_platform(
@@ -1268,6 +1318,7 @@ def register(ctx) -> None:
             "Pushover notifications are brief alerts, max 1024 characters. No markdown "
             "rendering. Use plain text. Pushover is fire-and-forget; do not expect a reply."
         ),
+        **_optional_platform_hooks(),
     )
 
     # Unified notifications command with two-level subcommands

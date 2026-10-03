@@ -528,3 +528,48 @@ class TestNotificationStateFiltering:
         assert sent_err is True
         assert sent_q is True
         assert sent_fin is False
+
+
+class TestRegistryHooks:
+    """env_enablement_fn / parse_target_ref_fn / standalone_sender_fn."""
+
+    KEY = "u" * 30
+
+    def test_env_enablement_seeds_home_channel(self, monkeypatch):
+        from pushover_hermes_plugin.adapter import _env_enablement
+        monkeypatch.setenv("PUSHOVER_APP_TOKEN", "app")
+        monkeypatch.setenv("PUSHOVER_HOME_CHANNEL", self.KEY)
+        assert _env_enablement()["home_channel"]["chat_id"] == self.KEY
+
+    def test_env_enablement_falls_back_to_user_key(self, monkeypatch):
+        from pushover_hermes_plugin.adapter import _env_enablement
+        monkeypatch.setenv("PUSHOVER_APP_TOKEN", "app")
+        monkeypatch.delenv("PUSHOVER_HOME_CHANNEL", raising=False)
+        monkeypatch.setenv("PUSHOVER_USER_KEY", self.KEY)
+        assert _env_enablement()["home_channel"]["chat_id"] == self.KEY
+
+    def test_env_enablement_none_without_token(self, monkeypatch):
+        from pushover_hermes_plugin.adapter import _env_enablement
+        monkeypatch.delenv("PUSHOVER_APP_TOKEN", raising=False)
+        assert _env_enablement() is None
+
+    def test_parse_target_ref(self):
+        from pushover_hermes_plugin.adapter import _parse_target_ref
+        assert _parse_target_ref(self.KEY) == (self.KEY, None)
+        assert _parse_target_ref("#general") is None
+        assert _parse_target_ref("short") is None
+
+    @pytest.mark.asyncio
+    async def test_standalone_send_maps_result(self, monkeypatch):
+        from pushover_hermes_plugin import adapter as mod
+        ok = MagicMock(success=True, message_id="req1", error=None)
+        bad = MagicMock(success=False, message_id=None, error="invalid user")
+        with patch.object(mod.PushoverAdapter, "send", AsyncMock(side_effect=[ok, bad])):
+            assert await mod._standalone_send(PlatformConfig(enabled=True), self.KEY, "hi") == {"success": True, "message_id": "req1"}
+            assert await mod._standalone_send(PlatformConfig(enabled=True), self.KEY, "hi") == {"error": "invalid user"}
+
+    def test_optional_hooks_filtered_by_platform_entry(self):
+        from pushover_hermes_plugin.adapter import _optional_platform_hooks
+        from gateway.platform_registry import PlatformEntry
+        known = set(getattr(PlatformEntry, "__dataclass_fields__", {}))
+        assert set(_optional_platform_hooks()) <= known

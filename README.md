@@ -51,6 +51,8 @@ hermes plugins update pushover-hermes-plugin         # pull latest
 hermes plugins remove pushover-hermes-plugin         # uninstall
 ```
 
+> **Upgrading from 1.0.x:** the plugin was renamed from `pushover-platform` to `pushover-hermes-plugin`. Replace `pushover-platform` with `pushover-hermes-plugin` in `plugins.enabled` (config.yaml), otherwise the gateway silently skips the plugin.
+
 After installing, restart the gateway:
 
 ```bash
@@ -153,6 +155,7 @@ hermes gateway restart --system
 - Messages are truncated to 1024 characters (Pushover API limit)
 - Images are sent as a text message containing the URL and caption
 - `metadata["title"]` is forwarded as the notification title when present
+- `PUSHOVER_HOME_CHANNEL` (defaults to `PUSHOVER_USER_KEY`) is the home channel for `send_message(target="pushover")`, `hermes send -t pushover` and cron `deliver=pushover`; `pushover:<user-or-group-key>` targets a specific key
 - Fire-and-forget — no reply handling
 
 ## Credits
