@@ -46,8 +46,17 @@ from typing import Any, Dict, Optional
 from gateway.config import Platform, PlatformConfig
 from gateway.platforms.base import BasePlatformAdapter, SendResult
 
-# Dedicated plugin logger — writes to ~/.hermes/logs/pushover_hermes_plugin.log
-_PLUGIN_LOG_DIR = Path.home() / ".hermes" / "logs"
+def _hermes_home() -> Path:
+    """Resolve HERMES_HOME (profile-aware), falling back to ~/.hermes outside Hermes."""
+    try:
+        from hermes_constants import get_hermes_home
+        return get_hermes_home()
+    except Exception:
+        return Path(os.getenv("HERMES_HOME", "").strip() or Path.home() / ".hermes")
+
+
+# Dedicated plugin logger — writes to $HERMES_HOME/logs/pushover_hermes_plugin.log
+_PLUGIN_LOG_DIR = _hermes_home() / "logs"
 _PLUGIN_LOG_DIR.mkdir(parents=True, exist_ok=True)
 _plugin_logger = logging.getLogger("pushover_plugin")
 
@@ -70,9 +79,9 @@ _plugin_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(mess
 _plugin_logger.addHandler(_plugin_handler)
 
 # Log module load — to stderr for visibility and to file
-sys.stderr.write(f"[PUSHOVER_PLUGIN] Module loaded, home={Path.home()}, log_dir={_PLUGIN_LOG_DIR}\n")
+sys.stderr.write(f"[PUSHOVER_PLUGIN] Module loaded, home={_hermes_home()}, log_dir={_PLUGIN_LOG_DIR}\n")
 sys.stderr.flush()
-_plugin_logger.info("=== MODULE LOADED — home=%s, log_level=%s ===", Path.home(), _plugin_log_level)
+_plugin_logger.info("=== MODULE LOADED — home=%s, log_level=%s ===", _hermes_home(), _plugin_log_level)
 
 # Track tool call start times for timing analysis
 _TOOL_CALL_TIMES: Dict[str, float] = {}
@@ -121,7 +130,7 @@ def is_connected(config) -> bool:
 
 
 def _load_env(env_path: str) -> Dict[str, str]:
-    """Read key=value pairs from ~/.hermes/.env."""
+    """Read key=value pairs from $HERMES_HOME/.env."""
     result: Dict[str, str] = {}
     if os.path.exists(env_path):
         with open(env_path) as f:
@@ -134,7 +143,7 @@ def _load_env(env_path: str) -> Dict[str, str]:
 
 
 def _save_env(env_path: str, updates: Dict[str, str]) -> None:
-    """Update key=value pairs in ~/.hermes/.env (upsert semantics)."""
+    """Update key=value pairs in $HERMES_HOME/.env (upsert semantics)."""
     lines: list[str] = []
     if os.path.exists(env_path):
         with open(env_path) as f:
@@ -276,7 +285,7 @@ def _setup_prompt() -> None:
         "button.focused":        "fg:default reverse bold",
     })
 
-    cfg = _load_current_config(os.path.expanduser("~/.hermes/.env"))
+    cfg = _load_current_config(str(_hermes_home() / ".env"))
 
     print("\n─── 🔔 Pushover Setup ───")
     print("1. Log in at https://pushover.net")
@@ -399,7 +408,7 @@ def _setup_prompt() -> None:
 
 def _setup_legacy() -> None:
     """Interactive setup wizard using raw input() \u2014 no InquirerPy required."""
-    cfg = _load_current_config(os.path.expanduser("~/.hermes/.env"))
+    cfg = _load_current_config(str(_hermes_home() / ".env"))
 
     print()
     _print_panel(
@@ -625,9 +634,12 @@ class PushoverAdapter(BasePlatformAdapter):
             _plugin_logger.error("Pushover HTTP error: %s", e)
             return SendResult(success=False, error=str(e))
 
-    async def send_image(self, chat_id: str, image_url: str, caption: str = "") -> SendResult:
+    async def send_image(
+        self, chat_id: str, image_url: str, caption: Optional[str] = None,
+        reply_to: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None,
+    ) -> SendResult:
         content = f"{caption}\n\n{image_url}" if caption else image_url
-        return await self.send(chat_id, content)
+        return await self.send(chat_id, content, reply_to=reply_to, metadata=metadata)
 
     async def send_clarify(
         self,
@@ -710,7 +722,7 @@ _notify_state_set = (
 
 
 # Persistent settings file — survives plugin reloads
-_SETTINGS_DIR = Path.home() / ".hermes" / "plugins" / "pushover"
+_SETTINGS_DIR = _hermes_home() / "plugins" / "pushover"
 _SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
 _SETTINGS_FILE = _SETTINGS_DIR / "settings.json"
 
@@ -857,12 +869,6 @@ def _send_native_notification(title: str, message: str) -> bool:
             ],
             check=True,
             timeout=5,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        
-        subprocess.Popen(
-            ["aplay", "/usr/share/sounds/speech-dispatcher/test.wav"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
@@ -1289,9 +1295,7 @@ def register(ctx) -> None:
         label="Pushover",
         adapter_factory=PushoverAdapter,
         check_fn=check_requirements,
-        # No validate_config — this is outbound-only. The adapter checks
-        # credentials in send() and returns a descriptive SendResult error
-        # if they're missing. Blocking adapter creation here is unnecessary.
+        validate_config=validate_config,
         is_connected=is_connected,
         required_env=["PUSHOVER_APP_TOKEN", "PUSHOVER_USER_KEY"],
         install_hint="pip install aiohttp",  # shown only if aiohttp is missing
