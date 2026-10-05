@@ -1119,14 +1119,14 @@ def _on_human_input_request(**kwargs: Any) -> None:
 
     command = str(kwargs.get("prompt") or "")
     message = _notify_message(
-        minimal="Sudo password needed — the command will time out without input",
-        summary=f"Sudo password needed: {command[:120]}",
-        full=f"Sudo password needed: {command[:300]}",
+        minimal="Password prompt waiting — the command will time out without input",
+        summary=f"Password prompt waiting: {command[:120]}",
+        full=f"Password prompt waiting: {command[:300]}",
     )
     threading.Thread(
         target=_dispatch_notification,
-        args=("Hermes — Sudo Password Needed", message),
-        name="pushover-sudo-alert",
+        args=("Hermes — Password Needed", message),
+        name="pushover-password-alert",
         daemon=True,
     ).start()
 

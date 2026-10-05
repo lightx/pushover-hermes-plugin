@@ -548,7 +548,7 @@ class TestHumanInputHook:
 
     def test_sudo_sends_with_command(self):
         sent = self._fire({"blockers"}, kind="sudo", prompt="sudo env TOKEN=*** whoami")
-        assert sent == [("Hermes — Sudo Password Needed", "Sudo password needed: sudo env TOKEN=*** whoami")]
+        assert sent == [("Hermes — Password Needed", "Password prompt waiting: sudo env TOKEN=*** whoami")]
 
     def test_sudo_blocked_without_blockers_state(self):
         assert self._fire({"finished"}, kind="sudo", prompt="sudo ls") == []
