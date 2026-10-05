@@ -530,6 +530,43 @@ class TestNotificationStateFiltering:
         assert sent_fin is False
 
 
+class TestHumanInputHook:
+    """Tests for the on_human_input_request sudo alert."""
+
+    def _fire(self, states: set, **kwargs) -> list:
+        """Helper: call the hook with a state set, wait for the send thread, return sends."""
+        import pushover_hermes_plugin.adapter as mod
+        sent = []
+        with patch.object(mod, "_pushover_notify_enabled", True), \
+             patch.object(mod, "_notify_state_set", states), \
+             patch.object(mod, "_notify_question", "full"), \
+             patch.object(mod, "_dispatch_notification", lambda t, m: sent.append((t, m))), \
+             patch.object(mod.threading, "Thread") as thread_cls:
+            thread_cls.side_effect = lambda target, args, **kw: MagicMock(start=lambda: target(*args))
+            mod._on_human_input_request(**kwargs)
+        return sent
+
+    def test_sudo_sends_with_command(self):
+        sent = self._fire({"blockers"}, kind="sudo", prompt="sudo env TOKEN=*** whoami")
+        assert sent == [("Hermes — Sudo Password Needed", "Sudo password needed: sudo env TOKEN=*** whoami")]
+
+    def test_sudo_blocked_without_blockers_state(self):
+        assert self._fire({"finished"}, kind="sudo", prompt="sudo ls") == []
+
+    def test_other_kinds_ignored(self):
+        assert self._fire({"blockers"}, kind="clarify", prompt="Which color?") == []
+        assert self._fire({"blockers"}, kind="approval", prompt="rm -rf /tmp/x") == []
+
+    def test_send_runs_on_daemon_thread(self):
+        import pushover_hermes_plugin.adapter as mod
+        with patch.object(mod, "_pushover_notify_enabled", True), \
+             patch.object(mod, "_notify_state_set", {"blockers"}), \
+             patch.object(mod.threading, "Thread") as thread_cls:
+            mod._on_human_input_request(kind="sudo", prompt="sudo ls")
+        assert thread_cls.call_args.kwargs["daemon"] is True
+        thread_cls.return_value.start.assert_called_once()
+
+
 class TestRegistryHooks:
     """env_enablement_fn / parse_target_ref_fn / standalone_sender_fn."""
 

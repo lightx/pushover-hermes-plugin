@@ -6,7 +6,7 @@ message handling.
 
 Also registers agent lifecycle hooks to send Pushover notifications
 when the agent finishes processing, needs approval, asks questions,
-blocks a kanban task, or needs a secret/API key.
+blocks a kanban task, waits on a sudo password, or needs a secret/API key.
 
 Configuration in config.yaml::
 
@@ -39,6 +39,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -1099,6 +1100,37 @@ def _on_post_approval_response(**kwargs: Any) -> None:
         _dispatch_notification("Hermes — Approval Response", message)
 
 
+def _on_human_input_request(**kwargs: Any) -> None:
+    """Hook handler: fires right before Hermes blocks on a person (Hermes > v0.21.5).
+
+    Only ``kind == "sudo"`` is handled here — clarify and approval prompts are
+    already covered by the tool-call and approval hooks. Gated on the
+    "blockers" state. ``prompt`` (the command) arrives already redacted by Hermes.
+
+    The hook runs on the thread that is about to show the password prompt, so
+    the send goes to a daemon thread instead of delaying the prompt.
+    """
+    if kwargs.get("kind") != "sudo":
+        return
+    if not _pushover_notify_enabled:
+        return
+    if "blockers" not in _notify_state_set:
+        return
+
+    command = str(kwargs.get("prompt") or "")
+    message = _notify_message(
+        minimal="Sudo password needed — the command will time out without input",
+        summary=f"Sudo password needed: {command[:120]}",
+        full=f"Sudo password needed: {command[:300]}",
+    )
+    threading.Thread(
+        target=_dispatch_notification,
+        args=("Hermes — Sudo Password Needed", message),
+        name="pushover-sudo-alert",
+        daemon=True,
+    ).start()
+
+
 def _build_clarify_notification(args: Dict[str, Any]) -> tuple[str, str]:
     """Build (title, message) for a clarify notification.
 
@@ -1333,6 +1365,7 @@ def register(ctx) -> None:
     ctx.register_hook("post_llm_call", _on_post_llm_call)
     ctx.register_hook("pre_approval_request", _on_pre_approval_request)
     ctx.register_hook("post_approval_response", _on_post_approval_response)
+    ctx.register_hook("on_human_input_request", _on_human_input_request)
     ctx.register_hook("pre_tool_call", _on_pre_tool_call)
     ctx.register_hook("post_tool_call", _on_post_tool_call)
 
@@ -1341,6 +1374,7 @@ def register(ctx) -> None:
     _plugin_logger.info("  post_llm_call: %s", _on_post_llm_call.__name__)
     _plugin_logger.info("  pre_approval_request: %s", _on_pre_approval_request.__name__)
     _plugin_logger.info("  post_approval_response: %s", _on_post_approval_response.__name__)
+    _plugin_logger.info("  on_human_input_request: %s", _on_human_input_request.__name__)
     _plugin_logger.info("  pre_tool_call: %s", _on_pre_tool_call.__name__)
     _plugin_logger.info("  post_tool_call: %s", _on_post_tool_call.__name__)
 

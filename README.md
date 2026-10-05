@@ -115,7 +115,9 @@ export PUSHOVER_NOTIFY_NATIVE=true      # native desktop notifications (notify-s
 | `PUSHOVER_NOTIFY_QUESTION` | `full` | Detail level: `full`, `summary`, or `minimal` (no agent text sent) |
 | `PUSHOVER_NOTIFY_DEVICE` | — | Restrict lifecycle notifications to one Pushover device |
 
-Hooks used: `post_llm_call`, `pre_approval_request`, `post_approval_response`, `pre_tool_call`, `post_tool_call`.
+`blockers` covers blocked kanban tasks and, on Hermes releases newer than v0.21.5, the masked sudo password prompt (the command will time out if nobody answers). On older releases the sudo alert is silently unavailable.
+
+Hooks used: `post_llm_call`, `pre_approval_request`, `post_approval_response`, `pre_tool_call`, `post_tool_call`, `on_human_input_request`.
 
 ### `/notifications` command
 
